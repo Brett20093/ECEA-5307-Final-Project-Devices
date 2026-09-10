@@ -1,0 +1,9 @@
+*.o
+*.d
+*.cmd
+*.mod
+*.mod.c
+*.ko
+*.symvers
+*.order
+lcd_test
