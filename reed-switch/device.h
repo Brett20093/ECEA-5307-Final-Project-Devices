@@ -1,7 +1,9 @@
 #ifndef REED_SWITCH_DEVICE_H_
 #define REED_SWITCH_DEVICE_H_
 
-//#define REED_SWITCH_DEBUG 1
+#include <linux/cdev.h>
+
+#define REED_SWITCH_DEBUG 1
 
 #undef PDEBUG
 #ifdef REED_SWITCH_DEBUG
