@@ -6,4 +6,4 @@
 *.ko
 *.symvers
 *.order
-lcd_test
+freezer_monitor
