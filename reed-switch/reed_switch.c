@@ -121,14 +121,14 @@ int reed_switch_init_module(void)
     }
 
     // Create class struct
-    if(IS_ERR(dev_class = class_create(THIS_MODULE,"switch_class"))){
+    if(IS_ERR(dev_class = class_create(THIS_MODULE,"reed_switch_class"))){
         printk(KERN_ERR "Cannot create the struct class\n");
         class_destroy(dev_class);
         return -1;
     }
  
     // Create device
-    if (IS_ERR(device_create(dev_class, NULL, dev, NULL, "switch"))){
+    if (IS_ERR(device_create(dev_class, NULL, dev, NULL, "reed_switch"))){
         printk(KERN_ERR "Cannot create the Device \n");
         device_destroy(dev_class, dev);
         class_destroy(dev_class);
