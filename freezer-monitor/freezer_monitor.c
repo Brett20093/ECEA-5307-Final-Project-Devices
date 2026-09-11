@@ -81,7 +81,6 @@ int main (int argc, char **argv)
 		usleep(10000);
 		
 		ret_byte = read(reed_fd, &reed_buf, 1);
-		printf("btn_buf: %d\n", reed_buf);
 		if (ret_byte != 1)
 		{
 			perror("read");
@@ -108,7 +107,6 @@ int main (int argc, char **argv)
 			{
 				reed_stable = 1;
 			}
-			printf("debounce_counter: %d\n", debounce_counter);
 			
 			old_reed_value = reed_buf;
 		}
