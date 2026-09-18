@@ -7,20 +7,26 @@
 #include <errno.h>
 #include <syslog.h>
 #include <fcntl.h>
+#include <string.h>
+#include "1602_lcd_ioctl.h"
 
-volatile int terminate = 0;
-const char reed_dev[] = "/dev/reed_switch";
+volatile int running = 1;
+const char reed_dev[] 	= "/dev/reed_switch";
+const char lcd_dev[] 	= "/dev/1602_lcd";
+char top_row_str[16] 	= "Reed switch is: ";
+char bottom_row_str[16] = "Closed          ";
 int reed_fd = -1;
+int lcd_fd = -1;
 
-int reed_value = 0;
-int old_reed_value = 0;
-int new_reed = 0;
+int reed_value = -1;
+int old_reed_value = -1;
+int new_reed = -1;
 
 void signal_handler(int signo)
 {
     if (signo == SIGTERM || signo == SIGINT)
     {
-		terminate = 1;
+		running = 0;
     }
 }
 
@@ -76,7 +82,34 @@ int main (int argc, char **argv)
 		return -1;
 	}
 
-	while (!terminate)
+	lcd_fd = open(lcd_dev, O_WRONLY);
+	if (reed_fd == -1)
+	{
+		perror("open /dev/1602_lcd");
+		syslog(LOG_ERR, "open /dev/1602_lcd");
+		return -1;
+	}
+	struct lcd_cursor cursor_pos = {0, 0};
+	ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
+	int lcd_write_ret = write(lcd_fd, top_row_str, strlen(top_row_str));
+	if (lcd_write_ret < 0)
+	{
+		perror("lcd write");
+		syslog(LOG_ERR, "lcd write");
+		return -1;
+	}
+
+	cursor_pos.row = 1;
+	ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
+	lcd_write_ret = write(lcd_fd, bottom_row_str, strlen(bottom_row_str));
+	if (lcd_write_ret < 0)
+	{
+		perror("lcd write");
+		syslog(LOG_ERR, "lcd write");
+		return -1;
+	}
+
+	while (running)
     {
 		usleep(10000);
 		
@@ -99,7 +132,7 @@ int main (int argc, char **argv)
         {
 			new_reed = 0;
 			
-			if (reed_buf == old_reed_value)
+			if (reed_buf == old_reed_value && reed_buf != reed_value)
 			{
 				debounce_counter++;
 			}
@@ -114,6 +147,23 @@ int main (int argc, char **argv)
         if (new_reed)
         {
             printf("Reed switch value: %d\n", reed_value);
+
+			if (reed_value == 0)
+			{
+				strcpy(bottom_row_str, "Open  ");
+			}
+			else 
+			{
+				strcpy(bottom_row_str, "Closed");
+			}
+			ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
+			lcd_write_ret = write(lcd_fd, bottom_row_str, strlen(bottom_row_str));
+			if (lcd_write_ret < 0)
+			{
+				perror("lcd write");
+				syslog(LOG_ERR, "lcd write");
+				return -1;
+			}
         }
 	}
 	
