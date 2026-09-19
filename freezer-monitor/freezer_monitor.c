@@ -8,12 +8,13 @@
 #include <syslog.h>
 #include <fcntl.h>
 #include <string.h>
+#include <time.h>
 #include "1602_lcd_ioctl.h"
 
 volatile int running = 1;
 const char reed_dev[] 	= "/dev/reed_switch";
 const char lcd_dev[] 	= "/dev/1602_lcd";
-char top_row_str[16] 	= "Reed switch is: ";
+char top_row_str[16] 	= "Opened:         ";
 char bottom_row_str[16] = "Closed          ";
 int reed_fd = -1;
 int lcd_fd = -1;
@@ -35,6 +36,9 @@ int main (int argc, char **argv)
 	int daemon_mode = 0;
 	
 	struct sigaction sa;
+
+	time_t current_time = time(NULL);
+	struct tm *local_time = localtime(&current_time);
 	
 	sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
@@ -150,12 +154,25 @@ int main (int argc, char **argv)
 
 			if (reed_value == 0)
 			{
-				strcpy(bottom_row_str, "Open  ");
+				current_time = time(NULL);
+				local_time = localtime(&current_time);
+				strcpy(top_row_str, "Opened:        ");
+				strftime(bottom_row_str, sizeof(bottom_row_str), "%d/%m %H:%S", local_time);
+
 			}
-			else 
+			cursor_pos.row = 0;
+			cursor_pos.col = 0;
+			ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
+			lcd_write_ret = write(lcd_fd, top_row_str, strlen(bottom_row_str));
+			if (lcd_write_ret < 0)
 			{
-				strcpy(bottom_row_str, "Closed");
+				perror("lcd write");
+				syslog(LOG_ERR, "lcd write");
+				return -1;
 			}
+
+			cursor_pos.row = 1;
+			cursor_pos.col = 0;
 			ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
 			lcd_write_ret = write(lcd_fd, bottom_row_str, strlen(bottom_row_str));
 			if (lcd_write_ret < 0)
