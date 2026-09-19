@@ -1,7 +1,7 @@
 CROSS_COMPILE ?=
 CC := $(CROSS_COMPILE)gcc
 INCDIR = ../lcd
-CFLAGS ?= -O0 -g -Wall -Werror -I$(INCDIR)
+CFLAGS ?= -O0 -g -Wall -Werror -Wno-format-truncation -I$(INCDIR)
 LDFLAGS ?=
 LIBS ?= -lpthread 
 all: freezer_monitor

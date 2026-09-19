@@ -1,0 +1,16 @@
+# /etc/systemd/system/freezer-monitor.service
+[Unit]
+Description=Freezer monitor
+After=local-fs.target
+
+[Service]
+Type=forking
+ExecStartPre=/sbin/modprobe reed_switch
+ExecStartPre=/sbin/modprobe 1602_lcd
+ExecStart=/usr/bin/freezer_monitor -d
+ExecStopPost=/sbin/modprobe -r 1602_lcd
+ExecStopPost=/sbin/modprobe -r reed_switch
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
