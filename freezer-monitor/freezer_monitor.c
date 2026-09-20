@@ -11,6 +11,9 @@
 #include <time.h>
 #include "1602_lcd_ioctl.h"
 
+#define LOOP_RATE_HZ 30
+
+const int LOOP_WAIT_TIME = 1000000/LOOP_RATE_HZ;
 volatile int running = 1;
 const char reed_dev[] 	= "/dev/reed_switch";
 const char lcd_dev[] 	= "/dev/1602_lcd";
@@ -59,7 +62,7 @@ int main(int argc, char **argv)
 
 	unsigned char temp_buf[2];
 	float temp_c = 0.0;
-	char temp_c_str[5] = "--.-\0";
+	char temp_c_str[6] = " --.-\0";
 
 	int daemon_mode = 0;
 	
@@ -142,7 +145,7 @@ int main(int argc, char **argv)
 
 	while (running)
     {
-		usleep(33333);
+		usleep(LOOP_WAIT_TIME);
 		
 		ret_byte = read(reed_fd, &reed_buf, 1);
 		if (ret_byte != 1)
@@ -186,8 +189,6 @@ int main(int argc, char **argv)
         
         if (new_reed)
         {
-            printf("Reed switch value: %d\n", reed_value);
-
 			if (reed_value == 0)
 			{
 				open_start_time = time(NULL);
@@ -224,8 +225,32 @@ int main(int argc, char **argv)
 			memcpy(bottom_row_str, elapsed_time_str, 8);
 		}
 
-		snprintf(temp_c_str, sizeof(temp_c_str), "%02.1f", temp_c);
-		memcpy(bottom_row_str+10, temp_c_str, 4);
+		if (temp_c > 99.9)
+		{
+			temp_c = 99.9;
+		}
+		else if (temp_c < -99.9)
+		{
+			temp_c = -99.9;
+		}
+
+		if (temp_c >= 10.0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
+		}
+		else if (temp_c < 10.0 && temp_c >= 0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), "  %01.1f", temp_c);
+		}
+		else if(temp_c < 0 && temp_c > -10.0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
+		}
+		else // temp_c <= -10.0
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), "%02.1f", temp_c);
+		}
+		memcpy(bottom_row_str+9, temp_c_str, 5);
 
 		if (write_line_to_lcd(bottom_row_str, strlen(bottom_row_str), 1) < 0)
 		{
