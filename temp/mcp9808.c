@@ -2,6 +2,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/cdev.h>
+#include <linux/kernel.h>
 #include "device.h"
 
 #define DRIVER_NAME "mcp9808"
@@ -26,17 +27,110 @@ MODULE_DEVICE_TABLE(of, mcp9808_of_match);
 
 int mcp9808_open(struct inode *inode, struct file *filp)
 {
-    
+    struct mcp9808_dev *dev = NULL;
+
+    dev = container_of(inode->i_cdev, struct mcp9808_dev, cdev);
+    if (dev == NULL)
+    {
+        PDEBUG("ERROR: MCP9808 open container_of");
+        return -ENODEV;
+    }
+
+    filp->private_data = dev;
+
+    if (mutex_lock_interruptible(&dev->lock))
+    {
+		return -ERESTARTSYS;
+    }
+
+    dev->data = kmalloc(2, GFP_KERNEL);
+    if (dev->data == NULL)
+    {
+        PDEBUG("ERROR: MCP9808 open kmalloc mcp9808_dev->data");
+        mutex_unlock(&dev->lock);
+        return -ENOMEM;
+    }
+
+    mutex_unlock(&dev->lock);
+
     return 0;
 }
 
 ssize_t mcp9808_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
-    return 0;
+    unsigned char reg_addr = 0x05;
+    struct i2c_msg msg[2];
+    struct mcp9808_dev *dev = filp->private_data;
+    unsigned char tmp_data[2];
+    unsigned char upper_byte;
+    unsigned char lower_byte;
+    int temp_tenths;
+
+    msg[0].addr = dev->client->addr;
+    msg[0].flags = 0;
+    msg[0].len = 1;
+    msg[0].buf = &reg_addr;
+    msg[1].addr = dev->client->addr;
+    msg[1].flags = I2C_M_RD;
+    msg[1].len = 2;
+    msg[1].buf = tmp_data;
+
+    if (i2c_transfer(dev->client->adapter, msg, 2) < 0)
+    {
+        PDEBUG("ERROR: MCP9808 read i2c_transfer");
+        return -1;
+    }
+
+    if (mutex_lock_interruptible(&dev->lock))
+    {
+		return -ERESTARTSYS;
+    }
+
+    upper_byte = tmp_data[0] &0x1F;
+    lower_byte = tmp_data[1];
+    if (upper_byte & 0x10)
+    {
+        // negative temp
+        upper_byte &= 0x0F;
+        temp_tenths = 2560 - ((upper_byte * 16 + lower_byte / 16) * 10 + ((lower_byte & 0x0F) * 10) / 16);
+    }
+    else
+    {
+        // positive temp
+        temp_tenths = (upper_byte * 16 + lower_byte / 16) * 10 + ((lower_byte & 0x0F) * 10) / 16;
+    }
+    dev->data[0] = (temp_tenths >> 8) & 0xff;
+    dev->data[1] = temp_tenths & 0xff;
+
+    if (copy_to_user(buf, dev->data, 2))
+    {
+        PDEBUG("ERROR: MCP9808 copy_to_user");
+		mutex_unlock(&dev->lock);
+        return -EFAULT;
+	}
+
+    mutex_unlock(&dev->lock);
+
+    return 2;
 }
 
 int mcp9808_release(struct inode *indoe, struct file *filp)
 {
+    struct mcp9808_dev *dev = filp->private_data;
+
+    if (mutex_lock_interruptible(&dev->lock))
+    {
+		return -ERESTARTSYS;
+    }
+
+    if (dev->data != NULL)
+    {
+        kfree(dev->data);
+        dev->data = NULL;
+    }
+
+    mutex_unlock(&dev->lock);
+
     return 0;
 }
 
@@ -52,12 +146,22 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
     struct mcp9808_dev *dev;
     int ret = 0;
     struct i2c_msg msg[2];
-    unsigned char i2c_addr = MCP9808_I2C_ADDRESS;
+    unsigned char reg_addr = 0x06;
     unsigned char data[2];
+
+    dev = kzalloc(sizeof(struct mcp9808_dev), GFP_KERNEL);
+    if (dev == NULL) {
+        PDEBUG("ERROR: MCP9808 probe kzalloc mcp9808_dev");
+        return -ENOMEM;
+    }
+    PDEBUG("SUCCESS: MCP9808 probe kzalloc mcp9808_dev");
+    dev->data = NULL;
+    dev->client = client;
 
     if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
     {
         PDEBUG("ERROR: MCP9808 probe i2c_check_functionality.");
+        kfree(dev);
         return -ENODEV;
     }
     PDEBUG("SUCCESS: MCP9808 probe i2c_check_functionality.");
@@ -65,7 +169,7 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
     msg[0].addr = client->addr;
     msg[0].flags = 0;
     msg[0].len = 1;
-    msg[0].buf = &i2c_addr;
+    msg[0].buf = &reg_addr;
     msg[1].addr = client->addr;
     msg[1].flags = I2C_M_RD;
     msg[1].len = 2;
@@ -74,6 +178,7 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
     if (i2c_transfer(client->adapter, msg, 2) < 0)
     {
         PDEBUG("ERROR: MCP9808 probe i2c_transfer");
+        kfree(dev);
         return -ENODEV;
     }
     PDEBUG("SUCCESS: MCP9808 probe i2c_transfer, manufacture ID = %x", (data[0] << 8) | data[1]);
@@ -82,6 +187,7 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
     if (ret)
     {
         PDEBUG("ERROR: MCP9808 probe alloc_chrdev_region");
+        kfree(dev);
         return ret;
     }
     PDEBUG("SUCCESS: MCP9808 probe alloc_chrdev_region");
@@ -93,22 +199,11 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
 			PDEBUG("ERROR: MCP9808 probe class_create");
 			dev_class = NULL;
             unregister_chrdev_region(dev->devt, 1);
+            kfree(dev);
             return -EINVAL;
 		}
         PDEBUG("SUCCESS: MCP9808 probe class_create");
 	}
-    
-    dev = kzalloc(sizeof(struct mcp9808_dev), GFP_KERNEL);
-    if (dev == NULL)
-    {
-        PDEBUG("ERROR: MCP9808 probe kzalloc mcp9808_dev");
-        device_destroy(dev_class, dev->devt);
-        unregister_chrdev_region(dev->devt, 1);
-        return -ENOMEM;
-    }
-    PDEBUG("SUCCESS: MCP9808 probe kzalloc mcp9808_dev");
-    dev->data = NULL;
-    dev->client = client;
 
     cdev_init(&dev->cdev, &mcp9808_fops);
     dev->cdev.owner = THIS_MODULE;
@@ -119,6 +214,7 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
         PDEBUG("ERROR: MCP9808 probe cdev_add");
         device_destroy(dev_class, dev->devt);
         unregister_chrdev_region(dev->devt, 1);
+        kfree(dev);
         return ret;
     }
     PDEBUG("SUCCESS: MCP9808 probe cdev_add");
@@ -129,9 +225,12 @@ static int mcp9808_probe(struct i2c_client *client, const struct i2c_device_id *
         device_destroy(dev_class, dev->devt);
         cdev_del(&dev->cdev);
         unregister_chrdev_region(dev->devt, 1);
+        kfree(dev);
         return -EINVAL;
     }
     PDEBUG("SUCCESS: MCP9808 probe device_create");
+
+    mutex_init(&dev->lock);
 
     i2c_set_clientdata(client, dev);
 

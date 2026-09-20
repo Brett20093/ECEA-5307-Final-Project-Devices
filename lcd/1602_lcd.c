@@ -107,12 +107,12 @@ static void lcd_1602_set_cursor(struct i2c_client *client, uint8_t row, uint8_t 
 	lcd_send_byte(client, data, false);
 }
 
-static int lcd_1602_open(struct inode *inode, struct file *f)
+static int lcd_1602_open(struct inode *inode, struct file *filp)
 {	
 	struct lcd_dev *dev;
     
     dev = container_of(inode->i_cdev, struct lcd_dev, cdev);
-    f->private_data = dev;
+    filp->private_data = dev;
 
     return 0;
 }

@@ -1,5 +1,5 @@
-#ifndef LCD_1602_DEVICE_H_
-#define LCD_1602_DEVICE_H_
+#ifndef MCP9808_DEVICE_H_
+#define MCP9808_DEVICE_H_
 
 #define MCP9808_DEBUG 1 
 
@@ -22,6 +22,7 @@ struct mcp9808_dev {
 	dev_t devt;
      int tmp;
      unsigned char *data;
+     struct mutex lock;
 };
 
-#endif // LCD_1602_DEVICE_H_
+#endif // MCP9808_DEVICE_H_
