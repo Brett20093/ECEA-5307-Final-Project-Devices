@@ -18,9 +18,6 @@
 #define LCD_ENABLE_PIN      0x04
 #define LCD_BACK_LIGHT      0x08
 
-int reed_switch_major =   0;
-int reed_switch_minor =   0;
-
 static struct class *dev_class;
 
 MODULE_AUTHOR("Brett Lange");
