@@ -88,11 +88,12 @@ ssize_t mcp9808_read(struct file *filp, char __user *buf, size_t count, loff_t *
 
     upper_byte = tmp_data[0] &0x1F;
     lower_byte = tmp_data[1];
-    if (upper_byte & 0x10)
+    if ((upper_byte & 0x10) == 0x10)
     {
         // negative temp
         upper_byte &= 0x0F;
         temp_tenths = 2560 - ((upper_byte * 16 + lower_byte / 16) * 10 + ((lower_byte & 0x0F) * 10) / 16);
+        temp_tenths |= 0x1000;
     }
     else
     {

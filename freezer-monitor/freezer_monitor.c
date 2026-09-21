@@ -162,7 +162,16 @@ int main(int argc, char **argv)
 			syslog(LOG_ERR, "temperature read");
 			return -1;
 		}
-		temp_c = ((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0;
+		
+		if ((temp_buf[0] & 0x10) == 0x10)
+		{
+			temp_buf[0] &= 0x0f;
+			temp_c = -1.0 * (((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0);
+		}
+		else
+		{
+			temp_c = ((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0;
+		}
 		
 		if (reed_stable)
         {
