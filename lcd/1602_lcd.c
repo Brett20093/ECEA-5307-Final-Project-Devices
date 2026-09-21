@@ -18,9 +18,6 @@
 #define LCD_ENABLE_PIN      0x04
 #define LCD_BACK_LIGHT      0x08
 
-int reed_switch_major =   0;
-int reed_switch_minor =   0;
-
 static struct class *dev_class;
 
 MODULE_AUTHOR("Brett Lange");
@@ -110,12 +107,12 @@ static void lcd_1602_set_cursor(struct i2c_client *client, uint8_t row, uint8_t 
 	lcd_send_byte(client, data, false);
 }
 
-static int lcd_1602_open(struct inode *inode, struct file *f)
+static int lcd_1602_open(struct inode *inode, struct file *filp)
 {	
 	struct lcd_dev *dev;
     
     dev = container_of(inode->i_cdev, struct lcd_dev, cdev);
-    f->private_data = dev;
+    filp->private_data = dev;
 
     return 0;
 }

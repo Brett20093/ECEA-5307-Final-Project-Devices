@@ -11,13 +11,18 @@
 #include <time.h>
 #include "1602_lcd_ioctl.h"
 
+#define LOOP_RATE_HZ 30
+
+const int LOOP_WAIT_TIME = 1000000/LOOP_RATE_HZ;
 volatile int running = 1;
 const char reed_dev[] 	= "/dev/reed_switch";
 const char lcd_dev[] 	= "/dev/1602_lcd";
+const char temp_dev[]   = "/dev/mcp9808";
 char top_row_str[16] 	= "Op: --/-- --:-- ";
 char bottom_row_str[16] = ("--:--:--  --.-" "\xDF" "C");
 int reed_fd = -1;
 int lcd_fd = -1;
+int temp_fd = -1;
 struct lcd_cursor cursor_pos = {0, 0};
 
 void signal_handler(int signo)
@@ -54,6 +59,10 @@ int main(int argc, char **argv)
 	int reed_value = -1;
 	int old_reed_value = -1;
 	int new_reed = -1;
+
+	unsigned char temp_buf[2];
+	float temp_c = 0.0;
+	char temp_c_str[6] = " --.-\0";
 
 	int daemon_mode = 0;
 	
@@ -115,6 +124,14 @@ int main(int argc, char **argv)
 		syslog(LOG_ERR, "open /dev/1602_lcd");
 		return -1;
 	}
+
+	temp_fd = open(temp_dev, O_RDONLY);
+	if (temp_fd == -1)
+	{
+		perror("open /dev/mcp9808");
+		syslog(LOG_ERR, "open /dev/mcp9808");
+		return -1;
+	}
 	
 	if (write_line_to_lcd(top_row_str, strlen(top_row_str), 0) < 0) 
 	{
@@ -128,14 +145,32 @@ int main(int argc, char **argv)
 
 	while (running)
     {
-		usleep(33333);
+		usleep(LOOP_WAIT_TIME);
 		
 		ret_byte = read(reed_fd, &reed_buf, 1);
 		if (ret_byte != 1)
 		{
-			perror("read");
-			syslog(LOG_ERR, "read");
+			perror("reed switch read");
+			syslog(LOG_ERR, "reed switch read");
 			return -1;
+		}
+
+		ret_byte = read(temp_fd, &temp_buf, 2);
+		if (ret_byte != 2)
+		{
+			perror("temperature read");
+			syslog(LOG_ERR, "temperature read");
+			return -1;
+		}
+		
+		if ((temp_buf[0] & 0x10) == 0x10)
+		{
+			temp_buf[0] &= 0x0f;
+			temp_c = -1.0 * (((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0);
+		}
+		else
+		{
+			temp_c = ((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0;
 		}
 		
 		if (reed_stable)
@@ -163,8 +198,6 @@ int main(int argc, char **argv)
         
         if (new_reed)
         {
-            printf("Reed switch value: %d\n", reed_value);
-
 			if (reed_value == 0)
 			{
 				open_start_time = time(NULL);
@@ -199,11 +232,38 @@ int main(int argc, char **argv)
 			snprintf(elapsed_time_str, sizeof(elapsed_time_str), "%02d:%02d:%02d", hr, min, sec);
 
 			memcpy(bottom_row_str, elapsed_time_str, 8);
+		}
 
-			if (write_line_to_lcd(bottom_row_str, strlen(bottom_row_str), 1) < 0)
-			{
-				return -1;
-			}
+		if (temp_c > 99.9)
+		{
+			temp_c = 99.9;
+		}
+		else if (temp_c < -99.9)
+		{
+			temp_c = -99.9;
+		}
+
+		if (temp_c >= 10.0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
+		}
+		else if (temp_c < 10.0 && temp_c >= 0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), "  %01.1f", temp_c);
+		}
+		else if(temp_c < 0 && temp_c > -10.0)
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
+		}
+		else // temp_c <= -10.0
+		{
+			snprintf(temp_c_str, sizeof(temp_c_str), "%02.1f", temp_c);
+		}
+		memcpy(bottom_row_str+9, temp_c_str, 5);
+
+		if (write_line_to_lcd(bottom_row_str, strlen(bottom_row_str), 1) < 0)
+		{
+			return -1;
 		}
 	}
 	
