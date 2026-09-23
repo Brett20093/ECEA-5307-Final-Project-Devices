@@ -18,11 +18,13 @@ volatile int running = 1;
 const char reed_dev[] 	= "/dev/reed_switch";
 const char lcd_dev[] 	= "/dev/1602_lcd";
 const char temp_dev[]   = "/dev/mcp9808";
+const char buzzer_dev[] = "/dev/buzzer";
 char top_row_str[16] 	= "Op: --/-- --:-- ";
 char bottom_row_str[16] = ("--:--:--  --.-" "\xDF" "C");
 int reed_fd = -1;
 int lcd_fd = -1;
 int temp_fd = -1;
+int buzzer_fd = -1;
 struct lcd_cursor cursor_pos = {0, 0};
 
 void signal_handler(int signo)
@@ -63,6 +65,8 @@ int main(int argc, char **argv)
 	unsigned char temp_buf[2];
 	float temp_c = 0.0;
 	char temp_c_str[6] = " --.-\0";
+
+	char buzzer_value = 0;
 
 	int daemon_mode = 0;
 	
@@ -130,6 +134,14 @@ int main(int argc, char **argv)
 	{
 		perror("open /dev/mcp9808");
 		syslog(LOG_ERR, "open /dev/mcp9808");
+		return -1;
+	}
+
+	buzzer_fd = open(buzzer_dev, O_WRONLY);
+	if (buzzer_fd == -1)
+	{
+		perror("open /dev/buzzer");
+		syslog(LOG_ERR, "open /dev/buzzer");
 		return -1;
 	}
 	
@@ -265,6 +277,27 @@ int main(int argc, char **argv)
 		{
 			return -1;
 		}
+
+		if (temp_c > 27.0)
+		{
+			buzzer_value = 1;
+			if (write(buzzer_fd, &buzzer_value, 1) == -1)
+			{
+				perror("buzzer write");
+				syslog(LOG_ERR, "buzzer write");
+				return -1;
+			}
+		}
+		else
+		{
+			buzzer_value = 0;
+			if (write(buzzer_fd, &buzzer_value, 1) == -1)
+			{
+				perror("buzzer write");
+				syslog(LOG_ERR, "buzzer write");
+				return -1;
+			}
+		}
 	}
 	
 	printf("Caught signal, exiting\n");
@@ -272,6 +305,22 @@ int main(int argc, char **argv)
 	if (reed_fd != -1)
 	{
 		close(reed_fd);
+	}
+
+	if (lcd_fd != -1)
+	{
+		close(lcd_fd);
+	}
+
+	if (temp_fd != -1)
+	{
+		close(temp_fd);
+	}
+
+	if (buzzer_fd != -1)
+	{
+		write(buzzer_fd, &buzzer_value, 1);
+		close(buzzer_fd);
 	}
 	
 	return 0;
