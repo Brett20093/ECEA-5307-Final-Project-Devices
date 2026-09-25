@@ -244,18 +244,17 @@ int main(int argc, char **argv)
 			return -1;
 		}
 
-		if (temp_c > 0.0)
+		if (reed_value == 0 && elapsed_sec > 5)
 		{
-			ret = control_buzzer(buzzer_fd, 1);
+			ret = control_buzzer(buzzer_fd, 0);
 			if (ret != 0)
 			{
 				return ret;
 			}
 		}
-	
-		else if (reed_value == 0 && elapsed_sec > 5)
+		else if (temp_c > 0.0)
 		{
-			ret = control_buzzer(buzzer_fd, 0);
+			ret = control_buzzer(buzzer_fd, 1);
 			if (ret != 0)
 			{
 				return ret;
@@ -297,8 +296,7 @@ int main(int argc, char **argv)
 
 	if (buzzer_fd != -1)
 	{
-		buzzer_value = 0;
-		write(buzzer_fd, &buzzer_value, 1);
+		turn_off_buzzer(buzzer_fd);
 		close(buzzer_fd);
 	}
 	
