@@ -253,7 +253,7 @@ int main(int argc, char **argv)
 				return ret;
 			}
 		}
-		else if (bad_temp)
+		else if (bad_temp && reed_value == 1)
 		{
 			ret = control_buzzer(buzzer_fd, 1);
 			if (ret != 0)
