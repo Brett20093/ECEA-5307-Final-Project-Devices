@@ -8,10 +8,12 @@ Type=forking
 ExecStartPre=/sbin/modprobe reed_switch
 ExecStartPre=/sbin/modprobe 1602_lcd
 ExecStartPre=/sbin/modprobe mcp9808
+ExecStartPre=/sbin/modprobe buzzer
 ExecStart=/usr/bin/freezer_monitor -d
 ExecStopPost=/sbin/modprobe -r 1602_lcd
 ExecStopPost=/sbin/modprobe -r reed_switch
 ExecStopPost=/sbin/modprobe -r mcp9808
+ExecStopPost=/sbin/modprobe -r buzzer
 Restart=on-failure
 
 [Install]
