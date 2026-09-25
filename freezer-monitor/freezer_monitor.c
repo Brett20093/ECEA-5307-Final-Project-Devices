@@ -72,6 +72,7 @@ int main(int argc, char **argv)
 	
 	struct sigaction sa;
 
+	int elapsed_sec = 0;
 	struct tm *local_time;
 	time_t open_start_time = 0;
 	
@@ -230,7 +231,7 @@ int main(int argc, char **argv)
 
 		if (reed_value == 0 && open_start_time != 0)
 		{
-			int elapsed_sec = (int)difftime(time(NULL), open_start_time);
+			elapsed_sec = (int)difftime(time(NULL), open_start_time);
 			int hr = elapsed_sec / 3600;
 			int min = (elapsed_sec % 3600) / 60;
 			int sec = elapsed_sec % 60;
@@ -278,7 +279,7 @@ int main(int argc, char **argv)
 			return -1;
 		}
 
-		if (temp_c > 27.0)
+		if (reed_value == 0 && elapsed_sec > 5)
 		{
 			buzzer_value = 1;
 			if (write(buzzer_fd, &buzzer_value, 1) == -1)
