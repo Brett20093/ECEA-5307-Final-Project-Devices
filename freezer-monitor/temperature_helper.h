@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #define TEMP_C_STR_SIZE 6
-#define TEMP_CHECK_PERIOD_MS 5000
+#define TEMP_CHECK_PERIOD_MS 8000
 
 float convert_temp_buf_to_float(unsigned char * const temp_buf);
 
