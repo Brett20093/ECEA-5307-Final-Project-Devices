@@ -70,8 +70,6 @@ int main(int argc, char **argv)
 	float temp_c = 0.0;
 	char temp_c_str[TEMP_C_STR_SIZE] = " --.-\0";
 
-	char buzzer_value = 0;
-
 	int daemon_mode = 0;
 
 	int ret = 0;
