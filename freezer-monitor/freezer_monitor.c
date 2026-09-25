@@ -68,10 +68,8 @@ int main(int argc, char **argv)
 
 	unsigned char temp_buf[2];
 	float temp_c = 0.0;
-	float prev_temp_c = 0.0;
 	char temp_c_str[TEMP_C_STR_SIZE] = " --.-\0";
-	bool temp_check_stable = false;
-	int temp_check_counter = 0;
+	bool bad_temp = false;
 
 	int daemon_mode = 0;
 
@@ -166,8 +164,6 @@ int main(int argc, char **argv)
 
 	while (running)
     {
-		prev_temp_c = temp_c;
-
 		usleep(LOOP_WAIT_TIME);
 		
 		ret_byte = read(reed_fd, &reed_buf, 1);
@@ -247,21 +243,7 @@ int main(int argc, char **argv)
 			return -1;
 		}
 
-		if (temp_c > 0.0 && prev_temp_c <= temp_c)
-		{
-			if (temp_check_counter < 5)
-			{
-				temp_check_counter++;
-			}
-			else
-			{
-				temp_check_stable = true;
-			}
-		}
-		else
-		{
-			temp_check_stable = false;
-		}
+		bad_temp = check_bad_temp(temp_c);
 
 		if (reed_value == 0 && elapsed_sec > 5)
 		{
@@ -271,7 +253,7 @@ int main(int argc, char **argv)
 				return ret;
 			}
 		}
-		else if (temp_check_stable)
+		else if (bad_temp)
 		{
 			ret = control_buzzer(buzzer_fd, 1);
 			if (ret != 0)
