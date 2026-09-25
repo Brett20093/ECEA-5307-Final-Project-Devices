@@ -6,7 +6,7 @@ LDFLAGS ?=
 LIBS ?= -lpthread 
 all: freezer_monitor
 
-freezer_monitor: freezer_monitor.o
+freezer_monitor: buzzer_helper.o temperature_helper.o reed_switch_helper.o freezer_monitor.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 %.o: %.c
