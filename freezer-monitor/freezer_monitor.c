@@ -10,8 +10,12 @@
 #include <string.h>
 #include <time.h>
 #include "1602_lcd_ioctl.h"
+#include "temperature_helper.h"
+#include "reed_switch_helper.h"
+#include "buzzer_helper.h"
 
 #define LOOP_RATE_HZ 30
+#define LCD_ROW_SIZE 16
 
 const int LOOP_WAIT_TIME = 1000000/LOOP_RATE_HZ;
 volatile int running = 1;
@@ -19,8 +23,8 @@ const char reed_dev[] 	= "/dev/reed_switch";
 const char lcd_dev[] 	= "/dev/1602_lcd";
 const char temp_dev[]   = "/dev/mcp9808";
 const char buzzer_dev[] = "/dev/buzzer";
-char top_row_str[16] 	= "Op: --/-- --:-- ";
-char bottom_row_str[16] = ("--:--:--  --.-" "\xDF" "C");
+char top_row_str[LCD_ROW_SIZE] 	= "Op: --/-- --:-- ";
+char bottom_row_str[LCD_ROW_SIZE] = ("--:--:--  --.-" "\xDF" "C");
 int reed_fd = -1;
 int lcd_fd = -1;
 int temp_fd = -1;
@@ -64,14 +68,16 @@ int main(int argc, char **argv)
 
 	unsigned char temp_buf[2];
 	float temp_c = 0.0;
-	char temp_c_str[6] = " --.-\0";
-
-	char buzzer_value = 0;
+	char temp_c_str[TEMP_C_STR_SIZE] = " --.-\0";
+	bool bad_temp = false;
 
 	int daemon_mode = 0;
+
+	int ret = 0;
 	
 	struct sigaction sa;
 
+	char elapsed_time_str[ELAPSED_TIME_STR_SIZE];
 	int elapsed_sec = 0;
 	struct tm *local_time;
 	time_t open_start_time = 0;
@@ -175,16 +181,8 @@ int main(int argc, char **argv)
 			syslog(LOG_ERR, "temperature read");
 			return -1;
 		}
-		
-		if ((temp_buf[0] & 0x10) == 0x10)
-		{
-			temp_buf[0] &= 0x0f;
-			temp_c = -1.0 * (((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0);
-		}
-		else
-		{
-			temp_c = ((int)(temp_buf[0] << 8) | temp_buf[1]) / 10.0;
-		}
+
+		temp_c = convert_temp_buf_to_float(temp_buf);
 		
 		if (reed_stable)
         {
@@ -231,47 +229,13 @@ int main(int argc, char **argv)
 
 		if (reed_value == 0 && open_start_time != 0)
 		{
-			elapsed_sec = (int)difftime(time(NULL), open_start_time);
-			int hr = elapsed_sec / 3600;
-			int min = (elapsed_sec % 3600) / 60;
-			int sec = elapsed_sec % 60;
-			char elapsed_time_str[9];
-
-			if (hr > 99)
-			{
-				hr = 99;
-			}
-
-			snprintf(elapsed_time_str, sizeof(elapsed_time_str), "%02d:%02d:%02d", hr, min, sec);
-
+			set_elapsed_time_str(&elapsed_sec, &open_start_time, elapsed_time_str);
 			memcpy(bottom_row_str, elapsed_time_str, 8);
 		}
 
-		if (temp_c > 99.9)
-		{
-			temp_c = 99.9;
-		}
-		else if (temp_c < -99.9)
-		{
-			temp_c = -99.9;
-		}
+		limit_temp_c(&temp_c);
 
-		if (temp_c >= 10.0)
-		{
-			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
-		}
-		else if (temp_c < 10.0 && temp_c >= 0)
-		{
-			snprintf(temp_c_str, sizeof(temp_c_str), "  %01.1f", temp_c);
-		}
-		else if(temp_c < 0 && temp_c > -10.0)
-		{
-			snprintf(temp_c_str, sizeof(temp_c_str), " %02.1f", temp_c);
-		}
-		else // temp_c <= -10.0
-		{
-			snprintf(temp_c_str, sizeof(temp_c_str), "%02.1f", temp_c);
-		}
+		set_temp_str(temp_c, temp_c_str);
 		memcpy(bottom_row_str+9, temp_c_str, 5);
 
 		if (write_line_to_lcd(bottom_row_str, strlen(bottom_row_str), 1) < 0)
@@ -279,24 +243,30 @@ int main(int argc, char **argv)
 			return -1;
 		}
 
+		bad_temp = check_bad_temp(temp_c);
+
 		if (reed_value == 0 && elapsed_sec > 5)
 		{
-			buzzer_value = 1;
-			if (write(buzzer_fd, &buzzer_value, 1) == -1)
+			ret = control_buzzer(buzzer_fd, 0);
+			if (ret != 0)
 			{
-				perror("buzzer write");
-				syslog(LOG_ERR, "buzzer write");
-				return -1;
+				return ret;
+			}
+		}
+		else if (bad_temp && reed_value == 1)
+		{
+			ret = control_buzzer(buzzer_fd, 1);
+			if (ret != 0)
+			{
+				return ret;
 			}
 		}
 		else
 		{
-			buzzer_value = 0;
-			if (write(buzzer_fd, &buzzer_value, 1) == -1)
+			ret = turn_off_buzzer(buzzer_fd);
+			if (ret != 0)
 			{
-				perror("buzzer write");
-				syslog(LOG_ERR, "buzzer write");
-				return -1;
+				return ret;
 			}
 		}
 	}
@@ -310,6 +280,13 @@ int main(int argc, char **argv)
 
 	if (lcd_fd != -1)
 	{
+		memcpy(top_row_str, "                ", LCD_ROW_SIZE);
+		memcpy(bottom_row_str, "                ", LCD_ROW_SIZE);
+		write_line_to_lcd(top_row_str, strlen(bottom_row_str), 0);
+		write_line_to_lcd(bottom_row_str, strlen(bottom_row_str), 1);
+		cursor_pos.row = 0;
+		cursor_pos.col = 0;
+		ioctl(lcd_fd, LCD_IOCTL_SETCURSOR, &cursor_pos);
 		close(lcd_fd);
 	}
 
@@ -320,7 +297,7 @@ int main(int argc, char **argv)
 
 	if (buzzer_fd != -1)
 	{
-		write(buzzer_fd, &buzzer_value, 1);
+		turn_off_buzzer(buzzer_fd);
 		close(buzzer_fd);
 	}
 	
