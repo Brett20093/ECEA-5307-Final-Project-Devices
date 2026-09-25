@@ -82,11 +82,8 @@ bool check_bad_temp(float current_temp_c)
     {
         gettimeofday(&current_temp_check_time, NULL);
         elapsed_temp_time_check_ms = (current_temp_check_time.tv_sec - last_temp_check_time.tv_sec) * 1000 + (current_temp_check_time.tv_usec - last_temp_check_time.tv_usec) / 1000;
-        printf("elapsed_temp_time_check_ms: %d\n", elapsed_temp_time_check_ms);
         if (elapsed_temp_time_check_ms >= TEMP_CHECK_PERIOD_MS)
         {
-            printf("new check, previous_temp_check_c: %d\n", previous_temp_check_c);
-            printf("new check, current_temp_c: %d\n", current_temp_c);
             if (previous_temp_check_c <= current_temp_c)
             {
                 last_check_ret = true;
